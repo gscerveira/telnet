@@ -19,7 +19,11 @@ BUCKET = "nsf-ncar-era5"
 S3_PREFIX = f"s3://{BUCKET}/"
 
 # Set up S3 store and registry for virtualizarr
-_s3_store = obstore.store.S3Store.from_url(S3_PREFIX, config={"skip_signature": True})
+# nsf-ncar-era5 bucket is in us-west-2
+_s3_store = obstore.store.S3Store.from_url(
+    S3_PREFIX,
+    config={"skip_signature": True, "region": "us-west-2"}
+)
 _registry = ObjectStoreRegistry({S3_PREFIX: _s3_store})
 _parser = HDFParser()
 
