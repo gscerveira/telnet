@@ -180,6 +180,11 @@ def main():
         '--config', type=int, default=1,
         help='Model configuration to use'
     )
+    parser.add_argument(
+        '--virtual',
+        action='store_true',
+        help='Use virtual Icechunk stores instead of downloading data'
+    )
 
     args = parser.parse_args()
 
@@ -189,13 +194,28 @@ def main():
     print(f"Initialization dates: {args.init_dates}")
     print(f"Samples: {args.n_samples}")
     print(f"Config: {args.config}")
+    print(f"Virtual mode: {args.virtual}")
 
     # Setup
     setup_environment()
 
     # Data download
     if not args.skip_download:
-        download_data()
+        datadir = os.getenv('TELNET_DATADIR')
+        # Determine final date from init_dates
+        final_date = max(args.init_dates)
+
+        if args.virtual:
+            print("Using virtual ERA5 stores (streaming from S3)...")
+            # Build virtual stores if they don't exist
+            virtual_dir = os.path.join(datadir, 'virtual_stores')
+            if not os.path.exists(virtual_dir):
+                subprocess.run([
+                    'python', 'build_virtual_era5.py',
+                    '-idate', '194001', '-fdate', final_date
+                ], check=True)
+        else:
+            download_data()
         compute_indices()
 
     # Model training
