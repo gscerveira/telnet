@@ -1,5 +1,7 @@
 # Google Colab SSH Setup
 
+> **Warning:** Google Colab has recently restricted SSH tunneling on their platform. You may experience disconnections or account restrictions. **Recommended alternative:** Use `colab_maranhao_workflow.ipynb` instead, which runs the entire workflow directly in Colab's notebook interface with Google Drive persistence.
+
 This guide explains how to run TelNet on Google Colab while working from your local terminal.
 
 ## Prerequisites
