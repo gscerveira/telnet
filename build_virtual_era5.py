@@ -4,6 +4,7 @@ References NetCDF files on S3 without downloading them.
 """
 
 import os
+import re
 import argparse
 import fsspec
 import xarray as xr
@@ -67,7 +68,7 @@ def build_virtual_store(files, store_path, variable_name):
         try:
             vds = open_virtual_dataset(url, indexes={})
             virtual_datasets.append(vds)
-        except Exception as e:
+        except (OSError, ValueError, IOError) as e:
             print(f"  Warning: Could not virtualize {url}: {e}")
             continue
 
@@ -136,6 +137,13 @@ def main():
 
     args = parser.parse_args()
 
+    # Validate YYYYMM date format
+    yyyymm_pattern = re.compile(r'^\d{4}(0[1-9]|1[0-2])$')
+    if not yyyymm_pattern.match(args.initdate):
+        raise ValueError(f"Invalid initdate '{args.initdate}': must be YYYYMM format with valid month (01-12)")
+    if not yyyymm_pattern.match(args.finaldate):
+        raise ValueError(f"Invalid finaldate '{args.finaldate}': must be YYYYMM format with valid month (01-12)")
+
     start_year = int(args.initdate[:4])
     end_year = int(args.finaldate[:4])
 
@@ -154,6 +162,7 @@ def main():
             print(f"Virtual store already exists: {store_path}")
             continue
 
+        files = []
         if var == 'precipitation':
             files = get_precipitation_files(fs, start_year, end_year)
         elif var == 'u10':
@@ -163,7 +172,9 @@ def main():
         elif var == 'geopotential':
             files = get_geopotential_files(fs, start_year, end_year)
 
-        build_virtual_store(files, store_path, var)
+        result = build_virtual_store(files, store_path, var)
+        if result is None:
+            print(f"Warning: Failed to build virtual store for {var}")
 
     print("\nVirtual ERA5 stores complete!")
     print(f"Stores saved to: {virtual_dir}")
