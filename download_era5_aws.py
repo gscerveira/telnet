@@ -92,8 +92,10 @@ def download_era5_precipitation_aws(init_date, final_date, lats, lons):
                 # Sum large-scale and convective precipitation
                 total_precip = lsp_data[lsp_var] + cp_data[cp_var]
 
-                # Compute monthly total (sum over time)
-                monthly_total = total_precip.sum(dim='time')
+                # Compute monthly total (sum over all time dimensions)
+                # ERA5 forecast data uses 'forecast_initial_time' and 'forecast_hour' instead of 'time'
+                time_dims = [d for d in total_precip.dims if d not in ('latitude', 'longitude')]
+                monthly_total = total_precip.sum(dim=time_dims)
 
                 # Subset to region with buffer
                 lat_buffer = 5
@@ -185,7 +187,9 @@ def download_era5_winds_aws(init_date, final_date):
                     )
 
                     data_var = list(ds.data_vars)[0]
-                    monthly_mean = ds[data_var].mean(dim='time')
+                    # Find time dimension(s) dynamically
+                    time_dims = [d for d in ds[data_var].dims if d not in ('latitude', 'longitude', 'level')]
+                    monthly_mean = ds[data_var].mean(dim=time_dims)
                     monthly_mean = monthly_mean.expand_dims(
                         time=[np.datetime64(f'{year}-{month:02d}-01')]
                     )
@@ -262,7 +266,9 @@ def download_era5_geopotential_aws(init_date, final_date):
                     ds = ds.sel(level=levels, method='nearest')
 
                 # Convert geopotential to geopotential height
-                monthly_mean = ds[data_var].mean(dim='time') / 9.80665
+                # Find time dimension(s) dynamically
+                time_dims = [d for d in ds[data_var].dims if d not in ('latitude', 'longitude', 'level')]
+                monthly_mean = ds[data_var].mean(dim=time_dims) / 9.80665
                 monthly_mean = monthly_mean.expand_dims(
                     time=[np.datetime64(f'{year}-{month:02d}-01')]
                 )
