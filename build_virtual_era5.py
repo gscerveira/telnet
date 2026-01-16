@@ -9,11 +9,19 @@ import argparse
 import fsspec
 import xarray as xr
 import icechunk
+import obstore
 from virtualizarr import open_virtual_dataset
+from virtualizarr.parsers import HDFParser
+from virtualizarr.registry import ObjectStoreRegistry
 
 
 BUCKET = "nsf-ncar-era5"
 S3_PREFIX = f"s3://{BUCKET}/"
+
+# Set up S3 store and registry for virtualizarr
+_s3_store = obstore.store.S3Store.from_url(S3_PREFIX, config={"skip_signature": True})
+_registry = ObjectStoreRegistry({S3_PREFIX: _s3_store})
+_parser = HDFParser()
 
 
 def get_precipitation_files(fs, start_year, end_year):
@@ -65,7 +73,12 @@ def build_virtual_store(files, store_path, variable_name):
         if i % 100 == 0:
             print(f"  Processing file {i+1}/{len(files)}...")
         try:
-            vds = open_virtual_dataset(url, indexes={})
+            vds = open_virtual_dataset(
+                url,
+                parser=_parser,
+                registry=_registry,
+                loadable_variables=[]
+            )
             virtual_datasets.append(vds)
         except (OSError, ValueError, IOError) as e:
             print(f"  Warning: Could not virtualize {url}: {e}")
