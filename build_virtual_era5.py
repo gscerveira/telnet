@@ -10,7 +10,6 @@ import fsspec
 import xarray as xr
 import icechunk
 from virtualizarr import open_virtual_dataset
-from utils import exp_data_dir
 
 
 BUCKET = "nsf-ncar-era5"
