@@ -206,6 +206,9 @@ def main():
         final_date = max(args.init_dates)
 
         if args.virtual:
+            print("\n" + "="*60)
+            print("STEP: Setting up virtual ERA5 stores")
+            print("="*60)
             print("Using virtual ERA5 stores (streaming from S3)...")
             # Build virtual stores if they don't exist
             virtual_dir = os.path.join(datadir, 'virtual_stores')
