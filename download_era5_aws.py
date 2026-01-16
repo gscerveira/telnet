@@ -1,17 +1,18 @@
 """
-Download ERA5 data from AWS Open Data Registry instead of CDS.
-Provides the same output format as download_preprocess_data.py but uses
-s3://era5-pds which requires no authentication.
+Download ERA5 data from AWS Open Data Registry (NSF NCAR curated dataset).
+Uses s3://nsf-ncar-era5 which requires no authentication and has data from 1940-2025.
 """
 
 import os
 import argparse
 import numpy as np
-import pandas as pd
 import xarray as xr
 import s3fs
-from calendar import monthrange
 from utils import exp_data_dir
+
+
+# NSF NCAR ERA5 bucket
+BUCKET = "nsf-ncar-era5"
 
 
 def get_era5_aws_client():
@@ -19,11 +20,20 @@ def get_era5_aws_client():
     return s3fs.S3FileSystem(anon=True)
 
 
+def list_s3_files(fs, prefix):
+    """List files matching a prefix in S3."""
+    try:
+        return fs.glob(f"s3://{BUCKET}/{prefix}")
+    except Exception as e:
+        print(f"Warning: Could not list {prefix}: {e}")
+        return []
+
+
 def download_era5_precipitation_aws(init_date, final_date, lats, lons):
     """
     Download ERA5 monthly precipitation from AWS Open Data.
 
-    AWS ERA5 stores hourly data - we aggregate to monthly totals.
+    Downloads large-scale and convective precipitation, sums them for total.
     """
     root_datadir = os.getenv('TELNET_DATADIR')
     era5_dir = os.path.join(root_datadir, 'era5')
@@ -47,40 +57,79 @@ def download_era5_precipitation_aws(init_date, final_date, lats, lons):
             if year == fyr and month > int(final_date[5:7]):
                 continue
 
-            zarr_path = f's3://era5-pds/{year}/{month:02d}/data/precipitation_amount_1hour_Accumulation.zarr'
+            yyyymm = f"{year}{month:02d}"
+
+            # Find precipitation files for this month
+            lsp_pattern = f"e5.oper.fc.sfc.accumu/{yyyymm}/e5.oper.fc.sfc.accumu.128_142_lsp.ll025sc.*.nc"
+            cp_pattern = f"e5.oper.fc.sfc.accumu/{yyyymm}/e5.oper.fc.sfc.accumu.128_143_cp.ll025sc.*.nc"
+
+            lsp_files = list_s3_files(fs, lsp_pattern)
+            cp_files = list_s3_files(fs, cp_pattern)
+
+            if not lsp_files or not cp_files:
+                print(f"Warning: No precipitation data for {year}-{month:02d}")
+                continue
 
             try:
                 print(f"Downloading precipitation for {year}-{month:02d}...")
-                ds = xr.open_zarr(fs.get_mapper(zarr_path))
 
-                # Subset to region (with buffer for interpolation)
-                lat_buffer = 5
-                lon_buffer = 5
-                ds = ds.sel(
-                    lat=slice(lats[1] + lat_buffer, lats[0] - lat_buffer),
-                    lon=slice(lons[0] - lon_buffer + 360 if lons[0] < 0 else lons[0] - lon_buffer,
-                              lons[1] + lon_buffer + 360 if lons[1] < 0 else lons[1] + lon_buffer)
+                # Open and combine all files for this month
+                lsp_data = xr.open_mfdataset(
+                    [fs.open(f) for f in sorted(lsp_files)],
+                    combine='by_coords',
+                    engine='h5netcdf'
+                )
+                cp_data = xr.open_mfdataset(
+                    [fs.open(f) for f in sorted(cp_files)],
+                    combine='by_coords',
+                    engine='h5netcdf'
                 )
 
-                # Sum to monthly total
-                monthly_total = ds['precipitation_amount_1hour_Accumulation'].sum(dim='time0')
+                # Get variable names (may vary)
+                lsp_var = list(lsp_data.data_vars)[0]
+                cp_var = list(cp_data.data_vars)[0]
+
+                # Sum large-scale and convective precipitation
+                total_precip = lsp_data[lsp_var] + cp_data[cp_var]
+
+                # Compute monthly total (sum over time)
+                monthly_total = total_precip.sum(dim='time')
+
+                # Subset to region with buffer
+                lat_buffer = 5
+                lon_buffer = 5
+                monthly_total = monthly_total.sel(
+                    latitude=slice(lats[1] + lat_buffer, lats[0] - lat_buffer),
+                    longitude=slice(lons[0] + 360 - lon_buffer if lons[0] < 0 else lons[0] - lon_buffer,
+                                   lons[1] + 360 + lon_buffer if lons[1] < 0 else lons[1] + lon_buffer)
+                )
+
+                # Add time dimension
                 monthly_total = monthly_total.expand_dims(
                     time=[np.datetime64(f'{year}-{month:02d}-01')]
                 )
                 monthly_data.append(monthly_total)
 
+                lsp_data.close()
+                cp_data.close()
+
             except Exception as e:
-                print(f"Warning: Could not load {year}-{month:02d}: {e}")
+                print(f"Warning: Could not process {year}-{month:02d}: {e}")
                 continue
 
     if monthly_data:
         combined = xr.concat(monthly_data, dim='time')
-        combined = combined.rename({'precipitation_amount_1hour_Accumulation': 'pr'})
+        combined = combined.rename('pr')
 
-        # Convert longitude from 0-360 to -180-180
-        combined = combined.assign_coords(
-            lon=(((combined.lon + 180) % 360) - 180)
-        ).sortby('lon')
+        # Rename coordinates to standard names
+        if 'latitude' in combined.dims:
+            combined = combined.rename({'latitude': 'lat', 'longitude': 'lon'})
+
+        # Convert longitude from 0-360 to -180-180 if needed
+        if combined.lon.values.max() > 180:
+            combined = combined.assign_coords(
+                lon=(((combined.lon + 180) % 360) - 180)
+            ).sortby('lon')
 
         # Final subset to exact region
         combined = combined.sel(
@@ -103,8 +152,7 @@ def download_era5_winds_aws(init_date, final_date):
 
     fs = get_era5_aws_client()
 
-    for var_name, aws_var in [('u10', 'eastward_wind_at_10_metres'),
-                               ('v10', 'northward_wind_at_10_metres')]:
+    for var_name, var_code in [('u10', '128_165_10u'), ('v10', '128_166_10v')]:
         output_file = os.path.join(era5_dir, f'era5_{var_name}_{iyr}-{fyr}_preprocessed.nc')
         if os.path.exists(output_file):
             print(f"ERA5 {var_name} already exists: {output_file}")
@@ -119,18 +167,30 @@ def download_era5_winds_aws(init_date, final_date):
                 if year == fyr and month > int(final_date[5:7]):
                     continue
 
-                zarr_path = f's3://era5-pds/{year}/{month:02d}/data/{aws_var}.zarr'
+                yyyymm = f"{year}{month:02d}"
+                pattern = f"e5.oper.an.sfc/{yyyymm}/e5.oper.an.sfc.{var_code}.ll025sc.*.nc"
+                files = list_s3_files(fs, pattern)
+
+                if not files:
+                    print(f"Warning: No {var_name} data for {year}-{month:02d}")
+                    continue
 
                 try:
                     print(f"Downloading {var_name} for {year}-{month:02d}...")
-                    ds = xr.open_zarr(fs.get_mapper(zarr_path))
 
-                    # Monthly mean
-                    monthly_mean = ds[aws_var].mean(dim='time0')
+                    ds = xr.open_mfdataset(
+                        [fs.open(f) for f in sorted(files)],
+                        combine='by_coords',
+                        engine='h5netcdf'
+                    )
+
+                    data_var = list(ds.data_vars)[0]
+                    monthly_mean = ds[data_var].mean(dim='time')
                     monthly_mean = monthly_mean.expand_dims(
                         time=[np.datetime64(f'{year}-{month:02d}-01')]
                     )
                     monthly_data.append(monthly_mean)
+                    ds.close()
 
                 except Exception as e:
                     print(f"Warning: Could not load {year}-{month:02d}: {e}")
@@ -138,9 +198,12 @@ def download_era5_winds_aws(init_date, final_date):
 
         if monthly_data:
             combined = xr.concat(monthly_data, dim='time')
-            combined = combined.rename({aws_var: var_name})
+            combined = combined.rename(var_name)
 
-            # Interpolate to 2-degree grid
+            if 'latitude' in combined.dims:
+                combined = combined.rename({'latitude': 'lat', 'longitude': 'lon'})
+
+            # Interpolate to 2-degree grid for global teleconnections
             lon2interp = np.arange(0., 360., 2.0)
             lat2interp = np.arange(-88., 90., 2.0)[::-1]
             combined = combined.interp(lat=lat2interp, lon=lon2interp, method='linear')
@@ -164,8 +227,7 @@ def download_era5_geopotential_aws(init_date, final_date):
         return
 
     fs = get_era5_aws_client()
-    levels = [500, 700, 1000]
-    level_data = {level: [] for level in levels}
+    monthly_data = []
 
     for year in range(iyr, fyr + 1):
         for month in range(1, 13):
@@ -174,44 +236,56 @@ def download_era5_geopotential_aws(init_date, final_date):
             if year == fyr and month > int(final_date[5:7]):
                 continue
 
-            for level in levels:
-                zarr_path = f's3://era5-pds/{year}/{month:02d}/data/geopotential_at_{level}hPa.zarr'
+            yyyymm = f"{year}{month:02d}"
+            # Geopotential is stored as daily files
+            pattern = f"e5.oper.an.pl/{yyyymm}/e5.oper.an.pl.128_129_z.ll025sc.*.nc"
+            files = list_s3_files(fs, pattern)
 
-                try:
-                    print(f"Downloading geopotential {level}hPa for {year}-{month:02d}...")
-                    ds = xr.open_zarr(fs.get_mapper(zarr_path))
+            if not files:
+                print(f"Warning: No geopotential data for {year}-{month:02d}")
+                continue
 
-                    var_name = f'geopotential_at_{level}hPa'
-                    monthly_mean = ds[var_name].mean(dim='time0')
-                    # Convert geopotential to geopotential height
-                    monthly_mean = monthly_mean / 9.80665
-                    monthly_mean = monthly_mean.expand_dims(
-                        time=[np.datetime64(f'{year}-{month:02d}-01')]
-                    )
-                    level_data[level].append(monthly_mean)
+            try:
+                print(f"Downloading geopotential for {year}-{month:02d}...")
 
-                except Exception as e:
-                    print(f"Warning: Could not load {level}hPa {year}-{month:02d}: {e}")
-                    continue
+                ds = xr.open_mfdataset(
+                    [fs.open(f) for f in sorted(files)],
+                    combine='by_coords',
+                    engine='h5netcdf'
+                )
 
-    # Combine all levels
-    combined_levels = []
-    for level in levels:
-        if level_data[level]:
-            combined = xr.concat(level_data[level], dim='time')
-            combined = combined.expand_dims(level=[level])
-            combined_levels.append(combined)
+                data_var = list(ds.data_vars)[0]
 
-    if combined_levels:
-        final = xr.concat(combined_levels, dim='level')
-        final = final.rename({f'geopotential_at_{levels[0]}hPa': 'height'})
+                # Select pressure levels 500, 700, 1000 hPa
+                levels = [500, 700, 1000]
+                if 'level' in ds.dims:
+                    ds = ds.sel(level=levels, method='nearest')
+
+                # Convert geopotential to geopotential height
+                monthly_mean = ds[data_var].mean(dim='time') / 9.80665
+                monthly_mean = monthly_mean.expand_dims(
+                    time=[np.datetime64(f'{year}-{month:02d}-01')]
+                )
+                monthly_data.append(monthly_mean)
+                ds.close()
+
+            except Exception as e:
+                print(f"Warning: Could not load {year}-{month:02d}: {e}")
+                continue
+
+    if monthly_data:
+        combined = xr.concat(monthly_data, dim='time')
+        combined = combined.rename('height')
+
+        if 'latitude' in combined.dims:
+            combined = combined.rename({'latitude': 'lat', 'longitude': 'lon'})
 
         # Interpolate to 2-degree grid
         lon2interp = np.arange(0., 360., 2.0)
         lat2interp = np.arange(-88., 90., 2.0)[::-1]
-        final = final.interp(lat=lat2interp, lon=lon2interp, method='linear')
+        combined = combined.interp(lat=lat2interp, lon=lon2interp, method='linear')
 
-        final.to_netcdf(output_file)
+        combined.to_netcdf(output_file)
         print(f"Saved geopotential to {output_file}")
 
 
@@ -228,20 +302,24 @@ def download_era5_land_sea_mask_aws(lats, lons):
 
     fs = get_era5_aws_client()
 
-    # Land-sea mask is static, grab from any month
-    zarr_path = 's3://era5-pds/2020/01/data/land_sea_mask.zarr'
+    # Land-sea mask is in the invariant folder
+    mask_path = f"s3://{BUCKET}/e5.oper.invariant/197901/e5.oper.invariant.128_172_lsm.ll025sc.1979010100_1979010100.nc"
 
     try:
         print("Downloading land-sea mask...")
-        ds = xr.open_zarr(fs.get_mapper(zarr_path))
+        ds = xr.open_dataset(fs.open(mask_path), engine='h5netcdf')
 
-        # Get first time step (mask is static)
-        mask = ds['land_sea_mask'].isel(time0=0)
+        data_var = list(ds.data_vars)[0]
+        mask = ds[data_var].squeeze()
 
-        # Convert longitude from 0-360 to -180-180
-        mask = mask.assign_coords(
-            lon=(((mask.lon + 180) % 360) - 180)
-        ).sortby('lon')
+        if 'latitude' in mask.dims:
+            mask = mask.rename({'latitude': 'lat', 'longitude': 'lon'})
+
+        # Convert longitude from 0-360 to -180-180 if needed
+        if mask.lon.values.max() > 180:
+            mask = mask.assign_coords(
+                lon=(((mask.lon + 180) % 360) - 180)
+            ).sortby('lon')
 
         # Subset to region
         mask = mask.sel(
@@ -249,9 +327,10 @@ def download_era5_land_sea_mask_aws(lats, lons):
             lon=slice(lons[0], lons[1])
         )
 
-        mask = mask.expand_dims(time=[np.datetime64('2020-01-01')])
+        mask = mask.expand_dims(time=[np.datetime64('1979-01-01')])
         mask.to_netcdf(output_file)
         print(f"Saved land-sea mask to {output_file}")
+        ds.close()
 
     except Exception as e:
         print(f"Error downloading land-sea mask: {e}")
@@ -259,7 +338,7 @@ def download_era5_land_sea_mask_aws(lats, lons):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Download ERA5 data from AWS Open Data for TelNet'
+        description='Download ERA5 data from AWS Open Data (NSF NCAR) for TelNet'
     )
     parser.add_argument(
         '-idate', '--initdate',
@@ -294,6 +373,7 @@ def main():
 
     print(f"Downloading ERA5 data for region: lat={lats}, lon={lons}")
     print(f"Period: {init_date} to {final_date}")
+    print(f"Using NSF NCAR ERA5 bucket: s3://{BUCKET}/")
 
     # Download all variables
     download_era5_precipitation_aws(init_date, final_date, lats, lons)
