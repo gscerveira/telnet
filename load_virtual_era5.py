@@ -6,7 +6,6 @@ Streams data on-demand from S3 without local storage.
 import os
 import xarray as xr
 import icechunk
-import numpy as np
 
 
 BUCKET = "nsf-ncar-era5"
@@ -29,6 +28,10 @@ def open_virtual_era5(variable, datadir=None):
     xarray.Dataset
         Lazy-loaded dataset that streams from S3 on demand.
     """
+    valid_variables = ['precipitation', 'u10', 'v10', 'geopotential']
+    if variable not in valid_variables:
+        raise ValueError(f"Invalid variable '{variable}'. Must be one of: {valid_variables}")
+
     if datadir is None:
         datadir = os.getenv('TELNET_DATADIR', '/content/drive/MyDrive/telnet_data')
 
@@ -101,11 +104,17 @@ def load_era5_region(variable, lats, lons, time_slice=None, datadir=None):
     })
 
     if time_slice is not None:
-        time_name = 'time' if 'time' in ds.dims else list(ds.dims)[0]
+        dims = list(ds.dims)
+        if not dims:
+            raise ValueError("Dataset has no dimensions")
+        time_name = 'time' if 'time' in ds.dims else dims[0]
         data = data.sel({time_name: time_slice})
 
     # Get the data variable
-    data_var = list(data.data_vars)[0]
+    data_vars = list(data.data_vars)
+    if not data_vars:
+        raise ValueError("Dataset has no data variables")
+    data_var = data_vars[0]
     return data[data_var].load()
 
 
@@ -131,7 +140,10 @@ def compute_monthly_precip(lats, lons, start_date, end_date, datadir=None):
     })
 
     # Get data variable and resample to monthly
-    data_var = list(data.data_vars)[0]
+    data_vars = list(data.data_vars)
+    if not data_vars:
+        raise ValueError("Dataset has no data variables")
+    data_var = data_vars[0]
     monthly = data[data_var].resample(time='ME').sum()
 
     # Select time range
