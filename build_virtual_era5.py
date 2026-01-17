@@ -29,93 +29,102 @@ _parser = HDFParser()
 
 
 def get_precipitation_files(fs, start_year, end_year):
-    """Get list of precipitation files for date range (single recursive list)."""
-    import time
+    """Generate precipitation file URLs directly (no S3 listing needed)."""
+    from datetime import date
+    from dateutil.relativedelta import relativedelta
 
-    print(f"  Listing precipitation files from S3 ({start_year}-{end_year})...")
-    start_time = time.time()
+    print(f"  Generating precipitation file URLs ({start_year}-{end_year})...")
 
-    # Single recursive list - much faster than per-month globbing
-    prefix = f"{BUCKET}/e5.oper.fc.sfc.accumu"
-    print(f"    Fetching file list from {prefix}/ ...")
-    all_files = fs.find(prefix)
+    # ERA5 precipitation files follow a predictable pattern:
+    # Two files per month per variable (LSP and CP):
+    # - {YYYY}{MM}0106_{YYYY}{MM}1606.nc (1st-16th of month)
+    # - {YYYY}{MM}1606_{YYYY}{MM+1}0106.nc (16th to 1st of next month)
 
-    # Filter by date range and variable type (LSP and CP precipitation)
     files = []
-    for f in all_files:
-        if not f.endswith('.nc'):
-            continue
-        # Extract YYYYMM from path: bucket/e5.oper.fc.sfc.accumu/YYYYMM/filename.nc
-        parts = f.split('/')
-        if len(parts) >= 3:
-            yyyymm = parts[2]
-            if len(yyyymm) == 6 and yyyymm.isdigit():
-                year = int(yyyymm[:4])
-                if start_year <= year <= end_year:
-                    if '128_142_lsp' in f or '128_143_cp' in f:
-                        files.append(f"s3://{f}")
+    base_path = f"s3://{BUCKET}/e5.oper.fc.sfc.accumu"
 
-    elapsed = time.time() - start_time
-    print(f"    Found {len(files)} files in {elapsed:.1f}s")
+    current = date(start_year, 1, 1)
+    end = date(end_year, 12, 31)
+
+    while current <= end:
+        yyyymm = current.strftime("%Y%m")
+        next_month = current + relativedelta(months=1)
+        next_yyyymm = next_month.strftime("%Y%m")
+
+        for var_code in ['128_142_lsp', '128_143_cp']:
+            # First half of month: 0106 to 1606
+            files.append(
+                f"{base_path}/{yyyymm}/e5.oper.fc.sfc.accumu.{var_code}.ll025sc.{yyyymm}0106_{yyyymm}1606.nc"
+            )
+            # Second half: 1606 to next month 0106
+            files.append(
+                f"{base_path}/{yyyymm}/e5.oper.fc.sfc.accumu.{var_code}.ll025sc.{yyyymm}1606_{next_yyyymm}0106.nc"
+            )
+
+        current = next_month
+
+    print(f"    Generated {len(files)} file URLs (no S3 listing needed)")
     return sorted(files)
 
 
 def get_wind_files(fs, start_year, end_year, component='10u'):
-    """Get list of wind files for date range (single recursive list)."""
-    import time
+    """Generate wind file URLs directly (no S3 listing needed)."""
+    from datetime import date
+    from dateutil.relativedelta import relativedelta
+    import calendar
 
     var_code = '128_165_10u' if component == '10u' else '128_166_10v'
-    print(f"  Listing {component} wind files from S3 ({start_year}-{end_year})...")
-    start_time = time.time()
+    print(f"  Generating {component} wind file URLs ({start_year}-{end_year})...")
 
-    prefix = f"{BUCKET}/e5.oper.an.sfc"
-    print(f"    Fetching file list from {prefix}/ ...")
-    all_files = fs.find(prefix)
+    # Wind files: 1 file per month covering full month
+    # Pattern: {YYYY}{MM}0100_{YYYY}{MM}{LAST_DAY}23.nc
 
     files = []
-    for f in all_files:
-        if not f.endswith('.nc'):
-            continue
-        parts = f.split('/')
-        if len(parts) >= 3:
-            yyyymm = parts[2]
-            if len(yyyymm) == 6 and yyyymm.isdigit():
-                year = int(yyyymm[:4])
-                if start_year <= year <= end_year:
-                    if var_code in f:
-                        files.append(f"s3://{f}")
+    base_path = f"s3://{BUCKET}/e5.oper.an.sfc"
 
-    elapsed = time.time() - start_time
-    print(f"    Found {len(files)} files in {elapsed:.1f}s")
+    current = date(start_year, 1, 1)
+    end = date(end_year, 12, 31)
+
+    while current <= end:
+        yyyymm = current.strftime("%Y%m")
+        last_day = calendar.monthrange(current.year, current.month)[1]
+
+        files.append(
+            f"{base_path}/{yyyymm}/e5.oper.an.sfc.{var_code}.ll025sc.{yyyymm}0100_{yyyymm}{last_day:02d}23.nc"
+        )
+
+        current = current + relativedelta(months=1)
+
+    print(f"    Generated {len(files)} file URLs (no S3 listing needed)")
     return sorted(files)
 
 
 def get_geopotential_files(fs, start_year, end_year):
-    """Get list of geopotential files for date range (single recursive list)."""
-    import time
+    """Generate geopotential file URLs directly (no S3 listing needed)."""
+    from datetime import date, timedelta
 
-    print(f"  Listing geopotential files from S3 ({start_year}-{end_year})...")
-    start_time = time.time()
+    print(f"  Generating geopotential file URLs ({start_year}-{end_year})...")
 
-    prefix = f"{BUCKET}/e5.oper.an.pl"
-    print(f"    Fetching file list from {prefix}/ ...")
-    all_files = fs.find(prefix)
+    # Geopotential files: 1 file per day
+    # Pattern: {YYYY}{MM}{DD}00_{YYYY}{MM}{DD}23.nc
 
     files = []
-    for f in all_files:
-        if not f.endswith('.nc'):
-            continue
-        parts = f.split('/')
-        if len(parts) >= 3:
-            yyyymm = parts[2]
-            if len(yyyymm) == 6 and yyyymm.isdigit():
-                year = int(yyyymm[:4])
-                if start_year <= year <= end_year:
-                    if '128_129_z' in f:
-                        files.append(f"s3://{f}")
+    base_path = f"s3://{BUCKET}/e5.oper.an.pl"
 
-    elapsed = time.time() - start_time
-    print(f"    Found {len(files)} files in {elapsed:.1f}s")
+    current = date(start_year, 1, 1)
+    end = date(end_year, 12, 31)
+
+    while current <= end:
+        yyyymm = current.strftime("%Y%m")
+        yyyymmdd = current.strftime("%Y%m%d")
+
+        files.append(
+            f"{base_path}/{yyyymm}/e5.oper.an.pl.128_129_z.ll025sc.{yyyymmdd}00_{yyyymmdd}23.nc"
+        )
+
+        current = current + timedelta(days=1)
+
+    print(f"    Generated {len(files)} file URLs (no S3 listing needed)")
     return sorted(files)
 
 
