@@ -69,28 +69,27 @@ def get_search_matrix():
     return search_matrix, df_search
 
 def read_obs_data():
-
     root_datadir = os.getenv('TELNET_DATADIR')
     if root_datadir is None:
         raise ValueError('Environment variable TELNET_DATADIR is not set.')
 
-    era5_dir = f'{root_datadir}/era5/'
-
     idcs_list = ['oni', 'atn-sst', 'ats-sst', 'atl-sst', 'iod', 'iobw', 'nao', 'pna', 'aao', 'ao']
     indices = read_indices_data('1941-01-01', '2023-12-01', root_datadir, idcs_list, '_1941-2024')
-    pcp = read_era5_data('pr', era5_dir, mask_ocean=True, period=('1940-01-01', '2024-01-01'))
+
+    # Load ERA5 from virtual stores (streams from S3)
+    print("Loading ERA5 precipitation from virtual stores...")
+    pcp = read_era5_data('pr', root_datadir, mask_ocean=False, period=('1940-01-01', '2024-01-01'))
 
     cov_date_s = ('1941-01-01', '2023-12-01')
     auto_date_s = ('1940-12-01', '2024-01-01')
     pred_date_s = ('1940-12-01', '2024-01-01')
-    # target_bounds = ((12., 8.), (-105., -82.))  # Costa Rica ERA5
-    target_bounds = ((None, None), (None, None))  # ERA5
-    
+    target_bounds = ((None, None), (None, None))
+
     X = {'auto': deepcopy(pcp['pr']), 'cov': deepcopy(indices)}
     Y = deepcopy(pcp['pr'])
 
-    Xdm = prepare_X_data(X, auto_date_s, cov_date_s, 
-                         cov_bounds=((None, None), (None, None)), 
+    Xdm = prepare_X_data(X, auto_date_s, cov_date_s,
+                         cov_bounds=((None, None), (None, None)),
                          auto_bounds=target_bounds)
 
     Ydm = prepare_Y_data(Y, pred_date_s, region_bounds=target_bounds)
