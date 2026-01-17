@@ -199,19 +199,56 @@ def read_indices_data(init_date, final_date, datadir, indices='all', institute='
 
     return df
 
-def read_era5_data(var, datadir, region_mask=None, mask_ocean=False, period=('1940-01-01', '2024-12-01')):
+def read_era5_data(var, datadir=None, region_mask=None, mask_ocean=False, period=('1940-01-01', '2024-12-01')):
+    """
+    Read ERA5 data from virtual Icechunk stores (streams from S3).
+    """
+    from load_virtual_era5 import open_virtual_era5
 
-    df_var = xr.open_dataset(f'{datadir}/era5_{var}_1940-2024_preprocessed.nc').sel(time=slice(period[0], period[1]))
+    if datadir is None:
+        datadir = os.getenv('TELNET_DATADIR')
+
+    # Map variable names
+    var_map = {'pr': 'precipitation'}
+    store_var = var_map.get(var, var)
+
+    # Open virtual store
+    ds = open_virtual_era5(store_var, datadir)
+
+    # Get raw variable name
+    data_vars = list(ds.data_vars)
+    raw_var = data_vars[0]
+
+    # Standardize coordinate names
+    rename_map = {}
+    if 'latitude' in ds.dims:
+        rename_map['latitude'] = 'lat'
+    if 'longitude' in ds.dims:
+        rename_map['longitude'] = 'lon'
+    if rename_map:
+        ds = ds.rename(rename_map)
+
+    # Convert longitude from 0-360 to -180-180 if needed
+    if ds.lon.values.max() > 180:
+        ds = ds.assign_coords(lon=(((ds.lon + 180) % 360) - 180)).sortby('lon')
+
+    # Slice time period
+    ds = ds.sel(time=slice(period[0], period[1]))
+
+    # Resample to monthly totals for precipitation
+    if var == 'pr':
+        da = ds[raw_var]
+        monthly = da.resample(time='ME').sum()
+        ds = monthly.to_dataset(name='pr')
+
+    # Apply region mask if provided
     if region_mask is not None:
-        mask = shape2mask(region_mask, df_var['lon'].values, df_var['lat'].values, 1.)
-        df_var['pr'].values[:, ~mask] = np.nan
-    if mask_ocean:
-        lat = df_var['lat'].values
-        lon = df_var['lon'].values
-        mask = xr.open_dataset(f'{datadir}/era5_land_sea_mask_1940-2024_preprocessed.nc').sel(lat=lat, lon=lon).isel(time=0)
-        df_var = df_var.where(np.tile(mask['lsm'].values, (df_var.time.size, 1, 1)) > 0.5, np.nan)
+        mask = shape2mask(region_mask, ds['lon'].values, ds['lat'].values, 1.)
+        ds['pr'].values[:, ~mask] = np.nan
 
-    return df_var
+    # Note: mask_ocean skipped for now (would need land-sea mask virtual store)
+
+    return ds
 
 def shape2mask(poly_limis, x, y, buffer):
 
