@@ -105,14 +105,14 @@ def variable_selection(Xdm: Dict[str, DataManager],
     return feat_order
 
 def main(nsamples, reproduce_paper=True):
-
+    import time
 
     """
-    seed_n: int, 
-    X: Dict[str, DataManager], 
-    Y: DataManager, 
+    seed_n: int,
+    X: Dict[str, DataManager],
+    Y: DataManager,
     search_arr: np.ndarray,
-    seeds: np.ndarray, 
+    seeds: np.ndarray,
     nmodels: int
     """
 
@@ -120,16 +120,26 @@ def main(nsamples, reproduce_paper=True):
         torch.multiprocessing.set_start_method('spawn')
         init_time = datetime.now()
 
+        print()
+        print("=" * 60)
+        print("  Feature Pre-Selection (PMI Ranking)")
+        print(f"  Samples: {nsamples}")
+        print(f"  Started: {init_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        print("=" * 60)
+        print()
+
         result_dir = f'{exp_results_dir}/selection/'
         make_dir(result_dir)
         checkpoints_dir = f'{exp_data_dir}/checkpoints_sel/'
         make_dir(checkpoints_dir)
-        print ('Reading data ...')
+        print('[1/3] Reading observation data...')
         X, Y, idcs_list = read_obs_data()
+        print(f'      Indices: {idcs_list}')
 
         if os.path.exists(os.path.join(exp_data_dir, 'seeds_pmi.txt')):
             # Read the existing seeds file
             seeds = np.loadtxt(os.path.join(exp_data_dir, 'seeds_pmi.txt'), delimiter=',', dtype=int)
+            print(f'      Loaded {len(seeds)} seeds from seeds_pmi.txt')
         else:
             if reproduce_paper:
                 seeds = np.arange(nsamples)
@@ -137,33 +147,50 @@ def main(nsamples, reproduce_paper=True):
                 seeds = sample(range(100000), nsamples)
             # Save seeds as a text file
             np.savetxt(os.path.join(exp_data_dir, 'seeds_pmi.txt'), seeds, delimiter=',', fmt='%i')
+            print(f'      Generated {len(seeds)} new seeds')
 
+        print()
+        print('[2/3] Running PMI variable ranking...')
         full_feat_order = []
+        start_time = time.time()
 
         for seed_n in seeds:
 
             seed_pos = np.argwhere(seeds == seed_n).flatten()[0]
             set_seed(seed_n)
 
-            print ('Sampling years ...')
+            # Progress update
+            elapsed = time.time() - start_time
+            if seed_pos > 0:
+                rate = seed_pos / elapsed
+                remaining = (len(seeds) - seed_pos) / rate
+                eta_min = int(remaining // 60)
+                eta_sec = int(remaining % 60)
+                print(f'      [{seed_pos+1:4d}/{len(seeds)}] {(seed_pos/len(seeds)*100):5.1f}% | '
+                      f'Elapsed: {int(elapsed//60)}m {int(elapsed%60)}s | ETA: {eta_min}m {eta_sec}s')
+            else:
+                print(f'      [{seed_pos+1:4d}/{len(seeds)}] Starting...')
+
             test_yrs = np.arange(2003, 2023)
             train_yrs, val_yrs, test_yrs = split_sample(np.arange(1941, 2002), test_yrs)
 
-            print (f'Preprocessing data n={seed_pos} ...')
             Xin, Yin = preprocess_data(deepcopy(X), deepcopy(Y), train_yrs)
-            print (f'Ranking variables n={seed_pos} ...')
             feat_order = variable_selection(Xin, Yin, train_yrs, val_yrs)
 
             full_feat_order.append(feat_order)
         
+        total_time = time.time() - start_time
+        print(f'\n      Ranking complete in {int(total_time//60)}m {int(total_time%60)}s')
+
         full_feat_order = np.stack(full_feat_order, axis=0)  # (nsamples, indices)
         plot_feat_freq(full_feat_order, result_dir)
-        
+
+        print()
+        print('[3/3] Computing final feature ranking...')
         final_feats = []
 
         for l in range(full_feat_order.shape[1]):
             feat_freq = Counter(full_feat_order[:, l]).most_common(full_feat_order.shape[1])
-            print (feat_freq)
             cond = False
             k = 0
             while cond == False:
@@ -172,11 +199,21 @@ def main(nsamples, reproduce_paper=True):
                     cond = True
                 else:
                     k += 1
-        print (final_feats)
 
-        np.savetxt(os.path.join(f'{exp_data_dir}/models/', f'final_feats.txt'), final_feats, delimiter=' ', fmt='%s')
+        output_path = os.path.join(f'{exp_data_dir}/models/', f'final_feats.txt')
+        np.savetxt(output_path, final_feats, delimiter=' ', fmt='%s')
+
+        end_time = datetime.now()
+        print()
+        print("=" * 60)
+        print("  Feature Pre-Selection Complete")
+        print(f"  Final ranking: {final_feats}")
+        print(f"  Saved to: {output_path}")
+        print(f"  Total time: {end_time - init_time}")
+        print("=" * 60)
+        print()
     else:
-        print ('Final features file already exists. Skipping feature selection.')
+        print('[SKIP] Final features file already exists: final_feats.txt')
 
 
 if __name__ == "__main__":

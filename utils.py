@@ -212,11 +212,13 @@ def read_era5_data(var, datadir=None, region_mask=None, mask_ocean=False, period
     store_var = var_map.get(var, var)
 
     # Open virtual store
+    print(f"  [ERA5] Opening virtual store for '{store_var}'...")
     ds = open_virtual_era5(store_var, datadir)
 
     # Get raw variable name
     data_vars = list(ds.data_vars)
     raw_var = data_vars[0]
+    print(f"  [ERA5] Found variable: {raw_var}, dims: {dict(ds.dims)}")
 
     # Standardize coordinate names
     rename_map = {}
@@ -225,28 +227,36 @@ def read_era5_data(var, datadir=None, region_mask=None, mask_ocean=False, period
     if 'longitude' in ds.dims:
         rename_map['longitude'] = 'lon'
     if rename_map:
+        print(f"  [ERA5] Renaming coordinates: {rename_map}")
         ds = ds.rename(rename_map)
 
     # Convert longitude from 0-360 to -180-180 if needed
     if ds.lon.values.max() > 180:
+        print("  [ERA5] Converting longitude from 0-360 to -180/180...")
         ds = ds.assign_coords(lon=(((ds.lon + 180) % 360) - 180)).sortby('lon')
 
     # Slice time period
+    print(f"  [ERA5] Selecting time period: {period[0]} to {period[1]}...")
     ds = ds.sel(time=slice(period[0], period[1]))
+    print(f"  [ERA5] Time range: {len(ds.time)} timesteps")
 
     # Resample to monthly totals for precipitation
     if var == 'pr':
+        print("  [ERA5] Resampling hourly data to monthly totals (streaming from S3)...")
         da = ds[raw_var]
         monthly = da.resample(time='ME').sum()
         ds = monthly.to_dataset(name='pr')
+        print(f"  [ERA5] Monthly data: {len(ds.time)} months")
 
     # Apply region mask if provided
     if region_mask is not None:
+        print("  [ERA5] Applying region mask...")
         mask = shape2mask(region_mask, ds['lon'].values, ds['lat'].values, 1.)
         ds['pr'].values[:, ~mask] = np.nan
 
     # Note: mask_ocean skipped for now (would need land-sea mask virtual store)
 
+    print("  [ERA5] Data ready.")
     return ds
 
 def shape2mask(poly_limis, x, y, buffer):

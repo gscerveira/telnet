@@ -44,6 +44,7 @@ def open_virtual_era5(variable, datadir=None):
         )
 
     # Open existing Icechunk repository
+    print(f"  [Icechunk] Opening repository: {store_path}")
     storage = icechunk.local_filesystem_storage(path=store_path)
     config = icechunk.RepositoryConfig.default()
     config.set_virtual_chunk_container(
@@ -58,6 +59,7 @@ def open_virtual_era5(variable, datadir=None):
 
     repo = icechunk.Repository.open(storage, config, credentials)
     session = repo.readonly_session(branch="main")
+    print(f"  [Icechunk] Connected to S3 bucket: {BUCKET} (streaming mode)")
 
     ds = xr.open_zarr(session.store, zarr_version=3, consolidated=False, chunks={})
     return ds
