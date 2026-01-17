@@ -551,33 +551,29 @@ def compute_climate_indices(final_season):
     sst_ersst = detrend_darray(sst_ersst)
     sst_ersst = sst_ersst.rolling(time=3, center=True).mean().sel(time=slice('1941-01-01', final_season))
 
-    # Load ERA5 u10, v10, height from ARCO ERA5 (streams from GCS)
-    from load_arco_era5 import open_arco_era5
-    print("  Loading ERA5 u10 from ARCO ERA5...")
-    u10ds_e5 = open_arco_era5('u10', period=('1940-01-01', str(final_season)[:10]))
-    # Resample hourly to monthly and load into memory (ARCO returns dask arrays)
-    u10_e5 = u10ds_e5.u10.resample(time='MS').mean().compute()
-    # Rename coordinates if needed
-    if 'latitude' in u10_e5.dims:
-        u10_e5 = u10_e5.rename({'latitude': 'lat', 'longitude': 'lon'})
+    # Load ERA5 from local preprocessed files (downloaded via CDS API)
+    era5_dir = os.path.join(telnet_datadir, 'era5')
+
+    print("  Loading ERA5 u10 from local files...")
+    u10_file = os.path.join(era5_dir, 'era5_u10_1940-present_preprocessed.nc')
+    u10ds = xr.open_dataset(u10_file)
+    u10_e5 = u10ds.u10
     u10_e5 = compute_std_anoms(u10_e5, slice(base_period[0], base_period[1]), stded=False)
     u10_e5 = detrend_darray(u10_e5)
     u10_e5 = u10_e5.rolling(time=3, center=True).mean().sel(time=slice('1941-01-01', final_season))
 
-    print("  Loading ERA5 v10 from ARCO ERA5...")
-    v10ds_e5 = open_arco_era5('v10', period=('1940-01-01', str(final_season)[:10]))
-    v10_e5 = v10ds_e5.v10.resample(time='MS').mean().compute()
-    if 'latitude' in v10_e5.dims:
-        v10_e5 = v10_e5.rename({'latitude': 'lat', 'longitude': 'lon'})
+    print("  Loading ERA5 v10 from local files...")
+    v10_file = os.path.join(era5_dir, 'era5_v10_1940-present_preprocessed.nc')
+    v10ds = xr.open_dataset(v10_file)
+    v10_e5 = v10ds.v10
     v10_e5 = compute_std_anoms(v10_e5, slice(base_period[0], base_period[1]), stded=False)
     v10_e5 = detrend_darray(v10_e5)
     v10_e5 = v10_e5.rolling(time=3, center=True).mean().sel(time=slice('1941-01-01', final_season))
 
-    print("  Loading ERA5 geopotential height from ARCO ERA5...")
-    hds_e5 = open_arco_era5('height', period=('1940-01-01', str(final_season)[:10]))
-    h_e5 = hds_e5.height.resample(time='MS').mean().compute()
-    if 'latitude' in h_e5.dims:
-        h_e5 = h_e5.rename({'latitude': 'lat', 'longitude': 'lon'})
+    print("  Loading ERA5 geopotential height from local files...")
+    hgt_file = os.path.join(era5_dir, 'era5_hgt_1940-present_preprocessed.nc')
+    hgtds = xr.open_dataset(hgt_file)
+    h_e5 = hgtds.height
     h_e5 = compute_std_anoms(h_e5, slice(base_period[0], base_period[1]), stded=False)
     h_e5 = detrend_darray(h_e5)
     h_e5 = h_e5.rolling(time=3, center=True).mean().sel(time=slice('1941-01-01', final_season))
