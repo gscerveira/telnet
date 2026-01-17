@@ -15,11 +15,14 @@ python prepare_local_data.py --output-dir ./telnet_data --n-samples 100
 ```
 
 This runs:
-- Virtual ERA5 store creation (5-10 min)
-- ERSSTv5 download (varies)
+- **Virtual ERA5 store creation** (~30-40 min first time only) - scans S3 metadata, no data download
+- ERSSTv5 download (for climate indices)
 - Shapefile download (fast)
-- Climate indices computation (5-10 min)
-- Feature pre-selection (10-30 min depending on samples)
+- Climate indices computation
+- Feature pre-selection
+
+**Important:** Virtual stores only need to be built once. Use `--skip-virtual` on subsequent runs.
+After building, ERA5 data streams directly from S3 during training - no local storage needed.
 
 ### Phase 2: Sync to Google Drive
 
@@ -34,18 +37,14 @@ Follow the instructions to upload to Google Drive.
 1. Open `colab_gpu_only_workflow.ipynb` in Google Colab
 2. Verify data was synced correctly (Cell 1)
 3. Run remaining GPU-intensive cells:
-   - Model selection (2-3 hours on T4 GPU)
-   - Model testing (30-60 min)
-   - Forecast generation (10-20 min)
+   - Model selection
+   - Model testing
+   - Forecast generation
 
-### Time Savings
+### Benefits of Virtual Stores
 
-| Task | Old (All Colab) | New (Split) |
-|------|-----------------|-------------|
-| Virtual stores | 5-10 min Colab | 5-10 min Local |
-| Climate indices | 5-10 min Colab | 5-10 min Local |
-| Feature selection | 10-30 min Colab | 10-30 min Local |
-| Model selection | 2-3 hr Colab GPU | 2-3 hr Colab GPU |
-| **Total Colab time** | **3-4+ hours** | **2-3 hours** |
-
-This saves ~1 hour of Colab GPU time per run.
+| Before | After |
+|--------|-------|
+| Download ~50GB ERA5 | Build virtual stores once (~30-40 min) |
+| Read from local files | Stream from S3 on-demand |
+| Requires disk space | Only ~50MB metadata |
