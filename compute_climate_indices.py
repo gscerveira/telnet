@@ -15,7 +15,7 @@ Atmospheric indices: AO, AAO, NAO, PNA, PSA1, PSA2,
 """
 
 telnet_datadir = os.getenv('TELNET_DATADIR')
-era5_dir = os.path.join(telnet_datadir, 'era5')
+era5_dir = os.path.join(telnet_datadir, 'era5')  # Legacy, not used with ARCO ERA5
 
 
 class LinearRegression:
@@ -543,30 +543,41 @@ def compute_climate_indices(final_season):
     # Load the data
     base_period = ('1982-01-01', '2015-12-01')
 
-    files = [os.path.join(telnet_datadir, f) for f in os.listdir(telnet_datadir) if f.startswith('ersstv5') and ('2025' in f or '2024' in f)]
-    sstds_ersst = xr.open_mfdataset(files, combine='nested', concat_dim='time').load()
+    # Load ERSSTv5 (single file covering 1940-present)
+    ersst_file = os.path.join(telnet_datadir, 'ersstv5_1940-present.nc')
+    sstds_ersst = xr.open_dataset(ersst_file).load()
     sst_ersst = sstds_ersst.sst
     sst_ersst = compute_std_anoms(sst_ersst, slice(base_period[0], base_period[1]), stded=False)
     sst_ersst = detrend_darray(sst_ersst)
     sst_ersst = sst_ersst.rolling(time=3, center=True).mean().sel(time=slice('1941-01-01', final_season))
 
-    files = [os.path.join(era5_dir, f) for f in os.listdir(era5_dir) if f.startswith('era5_u10') and ('2025' in f or '2024' in f)]
-    u10ds_e5 = xr.open_mfdataset(files, combine='nested', concat_dim='time').load()
-    u10_e5 = u10ds_e5.u10
+    # Load ERA5 u10, v10, height from ARCO ERA5 (streams from GCS)
+    from load_arco_era5 import open_arco_era5
+    print("  Loading ERA5 u10 from ARCO ERA5...")
+    u10ds_e5 = open_arco_era5('u10', period=('1940-01-01', str(final_season)[:10]))
+    # Resample hourly to monthly
+    u10_e5 = u10ds_e5.u10.resample(time='MS').mean()
+    # Rename coordinates if needed
+    if 'latitude' in u10_e5.dims:
+        u10_e5 = u10_e5.rename({'latitude': 'lat', 'longitude': 'lon'})
     u10_e5 = compute_std_anoms(u10_e5, slice(base_period[0], base_period[1]), stded=False)
     u10_e5 = detrend_darray(u10_e5)
     u10_e5 = u10_e5.rolling(time=3, center=True).mean().sel(time=slice('1941-01-01', final_season))
-    
-    files = [os.path.join(era5_dir, f) for f in os.listdir(era5_dir) if f.startswith('era5_v10') and ('2025' in f or '2024' in f)]
-    v10ds_e5 = xr.open_mfdataset(files, combine='nested', concat_dim='time').load()
-    v10_e5 = v10ds_e5.v10
+
+    print("  Loading ERA5 v10 from ARCO ERA5...")
+    v10ds_e5 = open_arco_era5('v10', period=('1940-01-01', str(final_season)[:10]))
+    v10_e5 = v10ds_e5.v10.resample(time='MS').mean()
+    if 'latitude' in v10_e5.dims:
+        v10_e5 = v10_e5.rename({'latitude': 'lat', 'longitude': 'lon'})
     v10_e5 = compute_std_anoms(v10_e5, slice(base_period[0], base_period[1]), stded=False)
     v10_e5 = detrend_darray(v10_e5)
     v10_e5 = v10_e5.rolling(time=3, center=True).mean().sel(time=slice('1941-01-01', final_season))
 
-    files = [os.path.join(era5_dir, f) for f in os.listdir(era5_dir) if f.startswith('era5_hgt') and ('2025' in f or '2024' in f)]
-    hds_e5 = xr.open_mfdataset(files, combine='nested', concat_dim='time').load()
-    h_e5 = hds_e5.height
+    print("  Loading ERA5 geopotential height from ARCO ERA5...")
+    hds_e5 = open_arco_era5('height', period=('1940-01-01', str(final_season)[:10]))
+    h_e5 = hds_e5.height.resample(time='MS').mean()
+    if 'latitude' in h_e5.dims:
+        h_e5 = h_e5.rename({'latitude': 'lat', 'longitude': 'lon'})
     h_e5 = compute_std_anoms(h_e5, slice(base_period[0], base_period[1]), stded=False)
     h_e5 = detrend_darray(h_e5)
     h_e5 = h_e5.rolling(time=3, center=True).mean().sel(time=slice('1941-01-01', final_season))
