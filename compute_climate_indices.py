@@ -555,8 +555,8 @@ def compute_climate_indices(final_season):
     from load_arco_era5 import open_arco_era5
     print("  Loading ERA5 u10 from ARCO ERA5...")
     u10ds_e5 = open_arco_era5('u10', period=('1940-01-01', str(final_season)[:10]))
-    # Resample hourly to monthly
-    u10_e5 = u10ds_e5.u10.resample(time='MS').mean()
+    # Resample hourly to monthly and load into memory (ARCO returns dask arrays)
+    u10_e5 = u10ds_e5.u10.resample(time='MS').mean().compute()
     # Rename coordinates if needed
     if 'latitude' in u10_e5.dims:
         u10_e5 = u10_e5.rename({'latitude': 'lat', 'longitude': 'lon'})
@@ -566,7 +566,7 @@ def compute_climate_indices(final_season):
 
     print("  Loading ERA5 v10 from ARCO ERA5...")
     v10ds_e5 = open_arco_era5('v10', period=('1940-01-01', str(final_season)[:10]))
-    v10_e5 = v10ds_e5.v10.resample(time='MS').mean()
+    v10_e5 = v10ds_e5.v10.resample(time='MS').mean().compute()
     if 'latitude' in v10_e5.dims:
         v10_e5 = v10_e5.rename({'latitude': 'lat', 'longitude': 'lon'})
     v10_e5 = compute_std_anoms(v10_e5, slice(base_period[0], base_period[1]), stded=False)
@@ -575,7 +575,7 @@ def compute_climate_indices(final_season):
 
     print("  Loading ERA5 geopotential height from ARCO ERA5...")
     hds_e5 = open_arco_era5('height', period=('1940-01-01', str(final_season)[:10]))
-    h_e5 = hds_e5.height.resample(time='MS').mean()
+    h_e5 = hds_e5.height.resample(time='MS').mean().compute()
     if 'latitude' in h_e5.dims:
         h_e5 = h_e5.rename({'latitude': 'lat', 'longitude': 'lon'})
     h_e5 = compute_std_anoms(h_e5, slice(base_period[0], base_period[1]), stded=False)
