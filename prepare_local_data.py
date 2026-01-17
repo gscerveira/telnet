@@ -17,6 +17,7 @@ for use in the Colab notebook.
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 
@@ -217,6 +218,26 @@ After completion, upload the output directory to Google Drive for Colab.
         results["feature_selection"] = run_command(
             cmd, telnet_dir, "Feature pre-selection"
         )
+
+        # Copy feature selection outputs from repo to output directory
+        # feature_pre_selection.py saves to {repo}/data/, but we need files in {output_dir}/data/
+        repo_data_dir = os.path.join(telnet_dir, 'data')
+        output_data_dir = os.path.join(output_dir, 'data')
+        os.makedirs(os.path.join(output_data_dir, 'models'), exist_ok=True)
+
+        # Copy final_feats.txt
+        src_feats = os.path.join(repo_data_dir, 'models', 'final_feats.txt')
+        dst_feats = os.path.join(output_data_dir, 'models', 'final_feats.txt')
+        if os.path.exists(src_feats):
+            shutil.copy2(src_feats, dst_feats)
+            print(f"  Copied {src_feats} -> {dst_feats}")
+
+        # Copy seeds_pmi.txt
+        src_seeds = os.path.join(repo_data_dir, 'seeds_pmi.txt')
+        dst_seeds = os.path.join(output_data_dir, 'seeds_pmi.txt')
+        if os.path.exists(src_seeds):
+            shutil.copy2(src_seeds, dst_seeds)
+            print(f"  Copied {src_seeds} -> {dst_seeds}")
     else:
         print("\n[SKIP] Feature pre-selection (--skip-feature-selection)")
 
