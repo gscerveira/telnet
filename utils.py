@@ -76,8 +76,8 @@ def read_obs_data():
     idcs_list = ['oni', 'atn-sst', 'ats-sst', 'atl-sst', 'iod', 'iobw', 'nao', 'pna', 'aao', 'ao']
     indices = read_indices_data('1941-01-01', '2023-12-01', root_datadir, idcs_list, '_1941-2024')
 
-    # Load ERA5 from virtual stores (streams from S3)
-    print("Loading ERA5 precipitation from virtual stores...")
+    # Load ERA5 from ARCO ERA5 (native Zarr on GCS - fast!)
+    print("Loading ERA5 precipitation from ARCO ERA5 (GCS)...")
     pcp = read_era5_data('pr', root_datadir, mask_ocean=False, period=('1940-01-01', '2024-01-01'))
 
     cov_date_s = ('1941-01-01', '2023-12-01')
@@ -200,20 +200,17 @@ def read_indices_data(init_date, final_date, datadir, indices='all', institute='
 
 def read_era5_data(var, datadir=None, region_mask=None, mask_ocean=False, period=('1940-01-01', '2024-12-01')):
     """
-    Read ERA5 data from virtual Icechunk stores (streams from S3).
+    Read ERA5 data from ARCO ERA5 Zarr on GCS (no virtualization needed).
     """
-    from load_virtual_era5 import open_virtual_era5
-
-    if datadir is None:
-        datadir = os.getenv('TELNET_DATADIR')
+    from load_arco_era5 import open_arco_era5
 
     # Map variable names
-    var_map = {'pr': 'precipitation'}
-    store_var = var_map.get(var, var)
+    var_map = {'pr': 'total_precipitation'}
+    arco_var = var_map.get(var, var)
 
-    # Open virtual store
-    print(f"  [ERA5] Opening virtual store for '{store_var}'...")
-    ds = open_virtual_era5(store_var, datadir)
+    # Open ARCO ERA5 from GCS
+    print(f"  [ERA5] Loading from ARCO ERA5 Zarr (GCS) for '{arco_var}'...")
+    ds = open_arco_era5(arco_var, period=period)
 
     # Get raw variable name
     data_vars = list(ds.data_vars)
@@ -235,14 +232,12 @@ def read_era5_data(var, datadir=None, region_mask=None, mask_ocean=False, period
         print("  [ERA5] Converting longitude from 0-360 to -180/180...")
         ds = ds.assign_coords(lon=(((ds.lon + 180) % 360) - 180)).sortby('lon')
 
-    # Slice time period
-    print(f"  [ERA5] Selecting time period: {period[0]} to {period[1]}...")
-    ds = ds.sel(time=slice(period[0], period[1]))
+    # Time period already sliced in open_arco_era5
     print(f"  [ERA5] Time range: {len(ds.time)} timesteps")
 
     # Resample to monthly totals for precipitation
     if var == 'pr':
-        print("  [ERA5] Resampling hourly data to monthly totals (streaming from S3)...")
+        print("  [ERA5] Resampling hourly data to monthly totals (streaming from GCS)...")
         da = ds[raw_var]
         monthly = da.resample(time='ME').sum()
         ds = monthly.to_dataset(name='pr')
