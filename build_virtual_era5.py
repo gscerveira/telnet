@@ -30,15 +30,24 @@ _parser = HDFParser()
 
 def get_precipitation_files(fs, start_year, end_year):
     """Get list of precipitation files for date range."""
+    import sys
     files = []
+    total_months = (end_year - start_year + 1) * 12
+    current = 0
+    print(f"  Scanning S3 for precipitation files ({start_year}-{end_year})...")
     for year in range(start_year, end_year + 1):
         for month in range(1, 13):
+            current += 1
             yyyymm = f"{year}{month:02d}"
+            # Progress update every 12 months (1 year)
+            if current % 12 == 1:
+                print(f"    [{current:4d}/{total_months}] Scanning {yyyymm}... ({len(files)} files found)", flush=True)
             # Large-scale precipitation
             lsp = fs.glob(f"{BUCKET}/e5.oper.fc.sfc.accumu/{yyyymm}/e5.oper.fc.sfc.accumu.128_142_lsp.ll025sc.*.nc")
             # Convective precipitation
             cp = fs.glob(f"{BUCKET}/e5.oper.fc.sfc.accumu/{yyyymm}/e5.oper.fc.sfc.accumu.128_143_cp.ll025sc.*.nc")
             files.extend([f"s3://{f}" for f in lsp + cp])
+    print(f"    Found {len(files)} precipitation files total")
     return sorted(files)
 
 
@@ -46,22 +55,36 @@ def get_wind_files(fs, start_year, end_year, component='10u'):
     """Get list of wind files for date range."""
     var_code = '128_165_10u' if component == '10u' else '128_166_10v'
     files = []
+    total_months = (end_year - start_year + 1) * 12
+    current = 0
+    print(f"  Scanning S3 for {component} wind files ({start_year}-{end_year})...")
     for year in range(start_year, end_year + 1):
         for month in range(1, 13):
+            current += 1
             yyyymm = f"{year}{month:02d}"
+            if current % 12 == 1:
+                print(f"    [{current:4d}/{total_months}] Scanning {yyyymm}... ({len(files)} files found)", flush=True)
             matches = fs.glob(f"{BUCKET}/e5.oper.an.sfc/{yyyymm}/e5.oper.an.sfc.{var_code}.ll025sc.*.nc")
             files.extend([f"s3://{f}" for f in matches])
+    print(f"    Found {len(files)} {component} wind files total")
     return sorted(files)
 
 
 def get_geopotential_files(fs, start_year, end_year):
     """Get list of geopotential files for date range."""
     files = []
+    total_months = (end_year - start_year + 1) * 12
+    current = 0
+    print(f"  Scanning S3 for geopotential files ({start_year}-{end_year})...")
     for year in range(start_year, end_year + 1):
         for month in range(1, 13):
+            current += 1
             yyyymm = f"{year}{month:02d}"
+            if current % 12 == 1:
+                print(f"    [{current:4d}/{total_months}] Scanning {yyyymm}... ({len(files)} files found)", flush=True)
             matches = fs.glob(f"{BUCKET}/e5.oper.an.pl/{yyyymm}/e5.oper.an.pl.128_129_z.ll025sc.*.nc")
             files.extend([f"s3://{f}" for f in matches])
+    print(f"    Found {len(files)} geopotential files total")
     return sorted(files)
 
 
@@ -208,9 +231,14 @@ def main():
     virtual_dir = os.path.join(root_datadir, 'virtual_stores')
     os.makedirs(virtual_dir, exist_ok=True)
 
+    print("Connecting to S3 (anonymous access)...")
     fs = fsspec.filesystem('s3', anon=True)
+    print("Connected to S3.\n")
 
     variables = [args.variable] if args.variable != 'all' else ['precipitation', 'u10', 'v10', 'geopotential']
+    print(f"Variables to process: {variables}")
+    print(f"Date range: {args.initdate} to {args.finaldate}")
+    print()
 
     for var in variables:
         store_path = os.path.join(virtual_dir, f'era5_{var}')
