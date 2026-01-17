@@ -46,22 +46,24 @@ def download_ersstv5(init_date, final_date):
 
     root_datadir = os.getenv('TELNET_DATADIR')
 
-    if not os.path.exists(f"{root_datadir}/ersstv5_{init_date[:4]}-{final_date[:4]}.nc"):
+    iyr = init_date[:4]
+    fyr = final_date[:4]
+    if int(fyr) > 2024:
+        fyr = 'present'
+
+    output_file = f"{root_datadir}/ersstv5_{iyr}-{fyr}.nc"
+
+    if not os.path.exists(output_file):
         download_link = 'https://downloads.psl.noaa.gov/Datasets/noaa.ersst.v5/sst.mnmean.nc'
-        iyr = init_date[:4]
-        fyr = final_date[:4]
-        if int(fyr) > 2024:
-            fyr = 'present'
-            init_date = '2025-01-01'
-        print (f"Downloading ERSSTv5 data for the period {init_date} to {final_date}...")
+        print(f"Downloading ERSSTv5 data for the period {init_date} to {final_date}...")
         wget.download(download_link, f"{root_datadir}/ersstv5_tmp.nc")
         ds = xr.open_dataset(f"{root_datadir}/ersstv5_tmp.nc")
         ds = ds.sel(time=slice(init_date, final_date)).drop('time_bnds')
-        ds.to_netcdf(f"{root_datadir}/ersstv5_{iyr}-{fyr}.nc")
+        ds.to_netcdf(output_file)
         os.remove(f"{root_datadir}/ersstv5_tmp.nc")
-        print (f"\nERSSTv5 data downloaded and saved to {root_datadir}/ersstv5_{iyr}-{fyr}.nc")
+        print(f"\nERSSTv5 data downloaded and saved to {output_file}")
     else:
-        print (f"ERSSTv5 data for the period {init_date} to {final_date} already exists. Skipping download.")
+        print(f"ERSSTv5 data already exists: {output_file}. Skipping download.")
 
 def retrieve_monthly_era5(vars, years, months, output, levels=[]):
 
