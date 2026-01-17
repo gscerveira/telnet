@@ -5,11 +5,11 @@ Prepare local data for TELNET workflow.
 This script runs CPU-intensive data preparation tasks locally, so only GPU work
 happens in Colab. It orchestrates existing scripts in the telnet repo:
 
-1. Build virtual ERA5 stores (Icechunk + VirtualiZarr)
-2. Download ERSSTv5 sea surface temperature data
+1. Build virtual ERA5 stores (Icechunk + VirtualiZarr) - streams from S3, no download
+2. Download ERSSTv5 sea surface temperature data (for climate indices)
 3. Download Maranhao shapefile
-4. Compute climate indices
-5. Run feature pre-selection (PMI ranking)
+4. Compute climate indices (from ERSSTv5 data)
+5. Run feature pre-selection (PMI ranking) - uses virtual stores for ERA5
 
 After running this script, upload the output directory to Google Drive
 for use in the Colab notebook.
@@ -119,7 +119,7 @@ After completion, upload the output directory to Google Drive for Colab.
     print(f"TELNET_DATADIR set to: {output_dir}")
 
     # Create necessary subdirectories
-    subdirs = ["era5", "shapefiles", "models", "virtual_stores"]
+    subdirs = ["shapefiles", "models", "virtual_stores"]
     for subdir in subdirs:
         subdir_path = os.path.join(output_dir, subdir)
         os.makedirs(subdir_path, exist_ok=True)
