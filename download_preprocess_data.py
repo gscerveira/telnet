@@ -31,6 +31,7 @@ def merge_present_data(var, final_date):
 def update_dates(init_date, final_date):
     root_datadir = os.getenv('TELNET_DATADIR')
     era5_dir = os.path.join(root_datadir, 'era5')
+    os.makedirs(era5_dir, exist_ok=True)
     existing_files = [f for f in os.listdir(era5_dir) if f.startswith('era5_pr') and f.endswith('present_preprocessed.nc')]
     if len(existing_files) == 0:
         return init_date, final_date
