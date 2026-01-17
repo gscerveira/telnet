@@ -29,70 +29,103 @@ _parser = HDFParser()
 
 
 def get_precipitation_files(fs, start_year, end_year):
-    """Get list of precipitation files for date range."""
-    import sys
+    """Get list of precipitation files for date range (single recursive list)."""
+    import time
+
+    print(f"  Listing precipitation files from S3 ({start_year}-{end_year})...")
+    start_time = time.time()
+
+    # Single recursive list - much faster than per-month globbing
+    prefix = f"{BUCKET}/e5.oper.fc.sfc.accumu"
+    print(f"    Fetching file list from {prefix}/ ...")
+    all_files = fs.find(prefix)
+
+    # Filter by date range and variable type (LSP and CP precipitation)
     files = []
-    total_months = (end_year - start_year + 1) * 12
-    current = 0
-    print(f"  Scanning S3 for precipitation files ({start_year}-{end_year})...")
-    for year in range(start_year, end_year + 1):
-        for month in range(1, 13):
-            current += 1
-            yyyymm = f"{year}{month:02d}"
-            # Progress update every 12 months (1 year)
-            if current % 12 == 1:
-                print(f"    [{current:4d}/{total_months}] Scanning {yyyymm}... ({len(files)} files found)", flush=True)
-            # Large-scale precipitation
-            lsp = fs.glob(f"{BUCKET}/e5.oper.fc.sfc.accumu/{yyyymm}/e5.oper.fc.sfc.accumu.128_142_lsp.ll025sc.*.nc")
-            # Convective precipitation
-            cp = fs.glob(f"{BUCKET}/e5.oper.fc.sfc.accumu/{yyyymm}/e5.oper.fc.sfc.accumu.128_143_cp.ll025sc.*.nc")
-            files.extend([f"s3://{f}" for f in lsp + cp])
-    print(f"    Found {len(files)} precipitation files total")
+    for f in all_files:
+        if not f.endswith('.nc'):
+            continue
+        # Extract YYYYMM from path: bucket/e5.oper.fc.sfc.accumu/YYYYMM/filename.nc
+        parts = f.split('/')
+        if len(parts) >= 3:
+            yyyymm = parts[2]
+            if len(yyyymm) == 6 and yyyymm.isdigit():
+                year = int(yyyymm[:4])
+                if start_year <= year <= end_year:
+                    if '128_142_lsp' in f or '128_143_cp' in f:
+                        files.append(f"s3://{f}")
+
+    elapsed = time.time() - start_time
+    print(f"    Found {len(files)} files in {elapsed:.1f}s")
     return sorted(files)
 
 
 def get_wind_files(fs, start_year, end_year, component='10u'):
-    """Get list of wind files for date range."""
+    """Get list of wind files for date range (single recursive list)."""
+    import time
+
     var_code = '128_165_10u' if component == '10u' else '128_166_10v'
+    print(f"  Listing {component} wind files from S3 ({start_year}-{end_year})...")
+    start_time = time.time()
+
+    prefix = f"{BUCKET}/e5.oper.an.sfc"
+    print(f"    Fetching file list from {prefix}/ ...")
+    all_files = fs.find(prefix)
+
     files = []
-    total_months = (end_year - start_year + 1) * 12
-    current = 0
-    print(f"  Scanning S3 for {component} wind files ({start_year}-{end_year})...")
-    for year in range(start_year, end_year + 1):
-        for month in range(1, 13):
-            current += 1
-            yyyymm = f"{year}{month:02d}"
-            if current % 12 == 1:
-                print(f"    [{current:4d}/{total_months}] Scanning {yyyymm}... ({len(files)} files found)", flush=True)
-            matches = fs.glob(f"{BUCKET}/e5.oper.an.sfc/{yyyymm}/e5.oper.an.sfc.{var_code}.ll025sc.*.nc")
-            files.extend([f"s3://{f}" for f in matches])
-    print(f"    Found {len(files)} {component} wind files total")
+    for f in all_files:
+        if not f.endswith('.nc'):
+            continue
+        parts = f.split('/')
+        if len(parts) >= 3:
+            yyyymm = parts[2]
+            if len(yyyymm) == 6 and yyyymm.isdigit():
+                year = int(yyyymm[:4])
+                if start_year <= year <= end_year:
+                    if var_code in f:
+                        files.append(f"s3://{f}")
+
+    elapsed = time.time() - start_time
+    print(f"    Found {len(files)} files in {elapsed:.1f}s")
     return sorted(files)
 
 
 def get_geopotential_files(fs, start_year, end_year):
-    """Get list of geopotential files for date range."""
+    """Get list of geopotential files for date range (single recursive list)."""
+    import time
+
+    print(f"  Listing geopotential files from S3 ({start_year}-{end_year})...")
+    start_time = time.time()
+
+    prefix = f"{BUCKET}/e5.oper.an.pl"
+    print(f"    Fetching file list from {prefix}/ ...")
+    all_files = fs.find(prefix)
+
     files = []
-    total_months = (end_year - start_year + 1) * 12
-    current = 0
-    print(f"  Scanning S3 for geopotential files ({start_year}-{end_year})...")
-    for year in range(start_year, end_year + 1):
-        for month in range(1, 13):
-            current += 1
-            yyyymm = f"{year}{month:02d}"
-            if current % 12 == 1:
-                print(f"    [{current:4d}/{total_months}] Scanning {yyyymm}... ({len(files)} files found)", flush=True)
-            matches = fs.glob(f"{BUCKET}/e5.oper.an.pl/{yyyymm}/e5.oper.an.pl.128_129_z.ll025sc.*.nc")
-            files.extend([f"s3://{f}" for f in matches])
-    print(f"    Found {len(files)} geopotential files total")
+    for f in all_files:
+        if not f.endswith('.nc'):
+            continue
+        parts = f.split('/')
+        if len(parts) >= 3:
+            yyyymm = parts[2]
+            if len(yyyymm) == 6 and yyyymm.isdigit():
+                year = int(yyyymm[:4])
+                if start_year <= year <= end_year:
+                    if '128_129_z' in f:
+                        files.append(f"s3://{f}")
+
+    elapsed = time.time() - start_time
+    print(f"    Found {len(files)} files in {elapsed:.1f}s")
     return sorted(files)
 
 
 def build_virtual_store(files, store_path, variable_name):
     """
     Build a virtual Icechunk store from a list of NetCDF files.
+    Uses parallel processing for faster metadata scanning.
     """
     import time
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     print(f"\n{'='*60}")
     print(f"Building virtual store for: {variable_name}")
@@ -102,42 +135,53 @@ def build_virtual_store(files, store_path, variable_name):
 
     start_time = time.time()
 
-    # Create virtual datasets from each file
-    virtual_datasets = []
-    errors = 0
-    for i, url in enumerate(files):
-        if i % 50 == 0:
-            elapsed = time.time() - start_time
-            if i > 0:
-                rate = i / elapsed
-                remaining = (len(files) - i) / rate
-                eta_min = int(remaining // 60)
-                eta_sec = int(remaining % 60)
-                print(f"  [{i+1:4d}/{len(files)}] {(i/len(files)*100):5.1f}% | "
-                      f"Elapsed: {int(elapsed//60)}m {int(elapsed%60)}s | "
-                      f"ETA: {eta_min}m {eta_sec}s | Errors: {errors}")
-            else:
-                print(f"  [{i+1:4d}/{len(files)}] Starting...")
+    def virtualize_file(url):
+        """Virtualize a single file, return None on error."""
         try:
-            vds = open_virtual_dataset(
+            return open_virtual_dataset(
                 url,
                 parser=_parser,
                 registry=_registry,
                 loadable_variables=[]
             )
-            virtual_datasets.append(vds)
-        except (OSError, ValueError, IOError) as e:
-            errors += 1
-            if errors <= 5:  # Only show first 5 errors
-                print(f"  Warning: Could not virtualize {url}: {e}")
-            continue
+        except (OSError, ValueError, IOError):
+            return None
+
+    # Parallel virtualization with progress tracking
+    print(f"  Virtualizing {len(files)} files (32 parallel workers)...")
+    virtual_datasets = []
+    errors = 0
+    completed = 0
+
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        futures = {executor.submit(virtualize_file, url): url for url in files}
+
+        for future in as_completed(futures):
+            completed += 1
+            result = future.result()
+            if result is not None:
+                virtual_datasets.append(result)
+            else:
+                errors += 1
+
+            # Progress update every 100 files
+            if completed % 100 == 0 or completed == len(files):
+                elapsed = time.time() - start_time
+                if completed > 0:
+                    rate = completed / elapsed
+                    remaining = (len(files) - completed) / rate if rate > 0 else 0
+                    eta_min = int(remaining // 60)
+                    eta_sec = int(remaining % 60)
+                    print(f"    [{completed:4d}/{len(files)}] {(completed/len(files)*100):5.1f}% | "
+                          f"Elapsed: {int(elapsed//60)}m {int(elapsed%60)}s | "
+                          f"ETA: {eta_min}m {eta_sec}s | OK: {len(virtual_datasets)} | Errors: {errors}")
 
     if not virtual_datasets:
         print(f"  ERROR: No files virtualized for {variable_name}")
         return None
 
     elapsed = time.time() - start_time
-    print(f"\n  Scan complete: {len(virtual_datasets)} files in {int(elapsed//60)}m {int(elapsed%60)}s")
+    print(f"\n  Virtualization complete: {len(virtual_datasets)} files in {int(elapsed//60)}m {int(elapsed%60)}s")
     if errors > 0:
         print(f"  Skipped {errors} files due to errors")
 
