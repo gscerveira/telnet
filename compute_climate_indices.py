@@ -433,20 +433,20 @@ def compute_ao_aao(hgt, e5_hgt, base_period):
     hgt = hgt.sortby(hgt.lon)
     time = hgt.time
 
-    hgt_NH= hgt.sel(level=e5_hgt.level.values[-1], lat=slice(89.5, 19.5))
+    hgt_NH= hgt.sel(pressure_level=e5_hgt.pressure_level.values[-1], lat=slice(89.5, 19.5))
     lats_NH= hgt_NH.lat.values
     lat_weights_NH= np.tile(np.sqrt(np.cos(np.deg2rad(lats_NH)))[:, np.newaxis], (1, hgt_NH.lon.shape[0])).reshape(-1)
     lons_NH= hgt_NH.lon.values
 
-    hgt_SH = hgt.sel(level=e5_hgt.level.values[1], lat=slice(-19.5, -89.5))
+    hgt_SH = hgt.sel(pressure_level=e5_hgt.pressure_level.values[1], lat=slice(-19.5, -89.5))
     lats_SH = hgt_SH.lat.values
     lat_weights_SH = np.tile(np.sqrt(np.cos(np.deg2rad(lats_SH)))[:, np.newaxis], (1, hgt_SH.lon.shape[0])).reshape(-1)
     lons_SH = hgt_SH.lon.values
 
     e5_hgt.coords['lon'] = (e5_hgt.coords['lon'] + 180) % 360 - 180
     e5_hgt = e5_hgt.sortby(e5_hgt.lon)
-    e5_hgt_NH = e5_hgt.sel(level=e5_hgt.level.values[-1], lat=slice(89.5, 19.5))
-    e5_hgt_SH = e5_hgt.sel(level=e5_hgt.level.values[1], lat=slice(-19.5, -89.5))
+    e5_hgt_NH = e5_hgt.sel(pressure_level=e5_hgt.pressure_level.values[-1], lat=slice(89.5, 19.5))
+    e5_hgt_SH = e5_hgt.sel(pressure_level=e5_hgt.pressure_level.values[1], lat=slice(-19.5, -89.5))
 
     land_mask_NH = compute_joint_mask(hgt_NH.values, e5_hgt_NH.values)
     land_mask_SH = compute_joint_mask(hgt_SH.values, hgt_SH.values)
@@ -479,14 +479,14 @@ def compute_psa_indices(hgt, e5_hgt, base_period):
     hgt = hgt.sortby(hgt.lon)
     time = hgt.time
 
-    hgt_south = hgt.sel(level=e5_hgt.level.values[0], lat=slice(-0.5, -89.5))
+    hgt_south = hgt.sel(pressure_level=e5_hgt.pressure_level.values[0], lat=slice(-0.5, -89.5))
     lats_SH = hgt_south.lat.values
     lat_weights_SH = np.tile(np.sqrt(np.cos(np.deg2rad(lats_SH)))[:, np.newaxis], (1, hgt_south.lon.shape[0])).reshape(-1)
     lons_SH = hgt_south.lon.values
 
     e5_hgt.coords['lon'] = (e5_hgt.coords['lon'] + 180) % 360 - 180
     e5_hgt = e5_hgt.sortby(e5_hgt.lon)
-    e5_hgt_south = e5_hgt.sel(level=e5_hgt.level.values[0], lat=slice(-0.5, -89.5))
+    e5_hgt_south = e5_hgt.sel(pressure_level=e5_hgt.pressure_level.values[0], lat=slice(-0.5, -89.5))
 
     land_mask_SH = compute_joint_mask(hgt_south.values, e5_hgt_south.values)
 
@@ -512,14 +512,14 @@ def compute_nh_indices(hgt, e5_hgt, base_period):
     hgt = hgt.sortby(hgt.lon)
     time = hgt.time
 
-    hgt_north = hgt.sel(level=e5_hgt.level.values[0], lat=slice(89.5, 19.5))
+    hgt_north = hgt.sel(pressure_level=e5_hgt.pressure_level.values[0], lat=slice(89.5, 19.5))
     lats_NH = hgt_north.lat.values
     lat_weights_NH = np.tile(np.sqrt(np.cos(np.deg2rad(lats_NH)))[:, np.newaxis], (1, hgt_north.lon.shape[0])).reshape(-1)
     lons_NH = hgt_north.lon.values
 
     e5_hgt.coords['lon'] = (e5_hgt.coords['lon'] + 180) % 360 - 180
     e5_hgt = e5_hgt.sortby(e5_hgt.lon)
-    e5_hgt_north = e5_hgt.sel(level=e5_hgt.level.values[0], lat=slice(89.5, 19.5))
+    e5_hgt_north = e5_hgt.sel(pressure_level=e5_hgt.pressure_level.values[0], lat=slice(89.5, 19.5))
 
     land_mask_NH = compute_joint_mask(hgt_north.values, e5_hgt_north.values)
 
