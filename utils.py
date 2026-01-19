@@ -76,8 +76,8 @@ def read_obs_data():
     idcs_list = ['oni', 'atn-sst', 'ats-sst', 'atl-sst', 'iod', 'iobw', 'nao', 'pna', 'aao', 'ao']
     indices = read_indices_data('1941-01-01', '2023-12-01', root_datadir, idcs_list, '_1941-2024')
 
-    # Load ERA5 from ARCO ERA5 (native Zarr on GCS - fast!)
-    print("Loading ERA5 precipitation from ARCO ERA5 (GCS)...")
+    # Load ERA5 from local preprocessed file
+    print("Loading ERA5 precipitation from local file...")
     pcp = read_era5_data('pr', root_datadir, mask_ocean=False, period=('1940-01-01', '2024-01-01'))
 
     cov_date_s = ('1941-01-01', '2023-12-01')
@@ -200,56 +200,27 @@ def read_indices_data(init_date, final_date, datadir, indices='all', institute='
 
 def read_era5_data(var, datadir=None, region_mask=None, mask_ocean=False, period=('1940-01-01', '2024-12-01')):
     """
-    Read ERA5 data from ARCO ERA5 Zarr on GCS (no virtualization needed).
+    Read ERA5 data from local preprocessed files (downloaded via CDS API).
     """
-    from load_arco_era5 import open_arco_era5
+    if datadir is None:
+        datadir = os.getenv('TELNET_DATADIR')
 
-    # Map variable names
-    var_map = {'pr': 'total_precipitation'}
-    arco_var = var_map.get(var, var)
+    era5_dir = os.path.join(datadir, 'era5')
 
-    # Open ARCO ERA5 from GCS
-    print(f"  [ERA5] Loading from ARCO ERA5 Zarr (GCS) for '{arco_var}'...")
-    ds = open_arco_era5(arco_var, period=period)
+    # Load from local preprocessed file
+    pr_file = os.path.join(era5_dir, 'era5_pr_1940-present_preprocessed.nc')
+    print(f"  [ERA5] Loading precipitation from local file: {pr_file}")
+    ds = xr.open_dataset(pr_file)
 
-    # Get raw variable name
-    data_vars = list(ds.data_vars)
-    raw_var = data_vars[0]
-    print(f"  [ERA5] Found variable: {raw_var}, dims: {dict(ds.dims)}")
-
-    # Standardize coordinate names
-    rename_map = {}
-    if 'latitude' in ds.dims:
-        rename_map['latitude'] = 'lat'
-    if 'longitude' in ds.dims:
-        rename_map['longitude'] = 'lon'
-    if rename_map:
-        print(f"  [ERA5] Renaming coordinates: {rename_map}")
-        ds = ds.rename(rename_map)
-
-    # Convert longitude from 0-360 to -180-180 if needed
-    if ds.lon.values.max() > 180:
-        print("  [ERA5] Converting longitude from 0-360 to -180/180...")
-        ds = ds.assign_coords(lon=(((ds.lon + 180) % 360) - 180)).sortby('lon')
-
-    # Time period already sliced in open_arco_era5
-    print(f"  [ERA5] Time range: {len(ds.time)} timesteps")
-
-    # Resample to monthly totals for precipitation
-    if var == 'pr':
-        print("  [ERA5] Resampling hourly data to monthly totals (streaming from GCS)...")
-        da = ds[raw_var]
-        monthly = da.resample(time='ME').sum()
-        ds = monthly.to_dataset(name='pr')
-        print(f"  [ERA5] Monthly data: {len(ds.time)} months")
+    # Slice to requested period
+    ds = ds.sel(time=slice(period[0], period[1]))
+    print(f"  [ERA5] Time range: {len(ds.time)} months")
 
     # Apply region mask if provided
     if region_mask is not None:
         print("  [ERA5] Applying region mask...")
         mask = shape2mask(region_mask, ds['lon'].values, ds['lat'].values, 1.)
         ds['pr'].values[:, ~mask] = np.nan
-
-    # Note: mask_ocean skipped for now (would need land-sea mask virtual store)
 
     print("  [ERA5] Data ready.")
     return ds
