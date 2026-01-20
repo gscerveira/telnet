@@ -190,7 +190,7 @@ class PMI:
             if S == []:
                 mi = mutual_info_regression(X, y)
             else:
-                mi = mutual_info_regression(u, v)
+                mi = mutual_info_regression(u, v.ravel())
             S.append(C[:, mi.argmax()])
             C = np.delete(C, mi.argmax(), 1)
             if C.shape[1] != 0:
