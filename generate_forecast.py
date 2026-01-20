@@ -31,7 +31,7 @@ def read_era5_pcp(datadir, region_mask=None, mask_ocean=False, period=('1940-01-
 
 def read_data(forecast_date: str):
     root_datadir = os.getenv('TELNET_DATADIR')
-    era5_dir = os.path.join(root_datadir, 'ERA5')
+    era5_dir = os.path.join(root_datadir, 'era5')
     
     hist_indices = read_indices_data('1941-01-01', '2023-12-01', root_datadir, institute='_1941-2024')
     present_indices = read_indices_data('2025-01-01', forecast_date, root_datadir, institute='_2025-present')
