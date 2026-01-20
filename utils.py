@@ -341,6 +341,7 @@ def set_seed(seed: int = 53) -> None:
     Function taken from https://wandb.ai/sauravmaheshkar/RSNA-MICCAI/reports/How-to-Set-Random-Seeds-in-PyTorch-and-Tensorflow--VmlldzoxMDA2MDQy
     This article shows the high variability of validation scores when using different seeds.
     """
+    seed = int(seed)
     np.random.seed(seed)
     random.seed(seed)
     torch.manual_seed(seed)
