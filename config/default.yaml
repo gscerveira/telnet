@@ -1,0 +1,66 @@
+# TelNet Default Configuration
+# Override these values by creating a local config file
+
+# Region definition
+region:
+  name: "maranhao"
+  lat_min: -11.0
+  lat_max: -1.0
+  lon_min: -48.0
+  lon_max: -41.5
+
+# Data paths (relative to TELNET_DATADIR or absolute)
+paths:
+  data_dir: "${TELNET_DATADIR:./data}"
+  era5_dir: "${data_dir}/era5"
+  indices_dir: "${data_dir}/indices"
+  models_dir: "${data_dir}/models"
+  results_dir: "./results"
+  baselines_dir: "${data_dir}/numerical_models_data"
+
+# Model hyperparameters
+model:
+  nunits: 128
+  dropout: 0.2
+  weight_scale: 0.01
+  epochs: 200
+  learning_rate: 0.001
+  clip: 5.0
+  batch_size: 24
+  nfeats: 10
+  time_steps: 2
+  lead: 6
+  nmembs: 10
+
+# Training settings
+training:
+  seed: 42
+  val_split: 0.2
+  early_stopping: true
+  patience: 20
+
+# Climate indices to use as features
+features:
+  indices:
+    - oni
+    - atn-sst
+    - iobw
+    - atl-sst
+    - ats-sst
+    - nao
+    - aao
+    - ao
+    - pna
+    - iod
+
+# SEAS5 downscaling settings (Phase 2)
+downscaling:
+  enabled: false
+  seas5_dir: "${data_dir}/seas5"
+  use_ensemble_mean: false
+  lead_times: [1, 2, 3]
+
+# Logging
+logging:
+  level: "INFO"
+  file: null
