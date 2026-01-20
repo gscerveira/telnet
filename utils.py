@@ -151,7 +151,7 @@ def preprocess_num_models(models_totals, test_yrs, init_month, Ymn_obs, Ystd_obs
 def flatten_lead_dim(darr, init_month):
 
     # +1 to center the seasonal window
-    time_axis = [np.datetime64(f'{i}-{((init_month+ceil(j))%12)+1:02d}-01') 
+    time_axis = [np.datetime64(f'{pd.to_datetime(i).year}-{((init_month+ceil(j))%12)+1:02d}-01') 
                  for i in darr.time.values for j in darr.leads.values]
 
     darr = darr.stack({'time_flatten': ['time', 'leads']}).transpose('time_flatten', 'nmembs', 'lat', 'lon').drop(['time', 'leads'])
@@ -180,8 +180,8 @@ def compute_num_models_std_anom(darr, test_yrs):
 
 def compute_num_models_totals(darr, mn_obs, std_obs):
 
-    darr*=std_obs.sel(time=darr.time.values)
-    darr+=mn_obs.sel(time=darr.time.values)
+    darr = darr * std_obs.sel(time=darr.time.values)
+    darr = darr + mn_obs.sel(time=darr.time.values)
     return darr
 
 def read_indices_data(init_date, final_date, datadir, indices='all', institute='_noaa'):

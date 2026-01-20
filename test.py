@@ -335,7 +335,8 @@ def main(arguments):
     checkpoints_dir = f'{exp_data_dir}/checkpoints_model'
     metric_names = ['Yval_RPS', 'RMSE', 'RPS', 'ranks', 'ranks_ext', 'obs_freq', 'prob_avg', 'pred_marginal', 'rel', 'res', 'RMSESS', 'RPSS']
     metrics = [None]*len(metric_names)
-    plot_ypred = True if seed_n % 10 == 0 else False
+    plot_ypred = False # Force false to avoid Colab crashes
+    # plot_ypred = True if seed_n % 10 == 0 else False
     if os.path.exists(f'{checkpoints_dir}/varsel_{seed_n}.nc'):
         vs_ds = xr.open_dataset(f'{checkpoints_dir}/varsel_{seed_n}.nc')
     else:

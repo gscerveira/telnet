@@ -15,7 +15,7 @@ from utilities.plots import plot_ypred_maps
 def read_era5_pcp(datadir, region_mask=None, mask_ocean=False, period=('1940-01-01', '2024-12-01')):
 
     if period[0] == '1940-01-01':
-        df_var = xr.open_dataset(f'{datadir}/era5_pr_1940-2024_preprocessed.nc').sel(time=slice(period[0], period[1]))
+        df_var = xr.open_dataset(f'{datadir}/era5_pr_1940-present_preprocessed.nc').sel(time=slice(period[0], period[1]))
     elif period[0] == '2025-01-01':
         df_var = xr.open_dataset(f'{datadir}/era5_pr_2025-present_preprocessed.nc').sel(time=slice(period[0], period[1]))
     if region_mask is not None:
@@ -24,7 +24,7 @@ def read_era5_pcp(datadir, region_mask=None, mask_ocean=False, period=('1940-01-
     if mask_ocean:
         lat = df_var['lat'].values
         lon = df_var['lon'].values
-        mask = xr.open_dataset(f'{datadir}/era5_land_sea_mask_1940-2024_preprocessed.nc').sel(lat=lat, lon=lon).isel(time=0)
+        mask = xr.open_dataset(f'{datadir}/era5_land_sea_mask_1940-present_preprocessed.nc').sel(lat=lat, lon=lon).isel(time=0)
         df_var = df_var.where(np.tile(mask['lsm'].values, (df_var.time.size, 1, 1)) > 0.5, np.nan)
 
     return df_var
