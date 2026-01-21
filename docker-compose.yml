@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # Training service with GPU support
+  train:
+    build:
+      context: .
+      target: training
+    volumes:
+      - ${TELNET_DATADIR:-./data}:/data
+      - ./results:/results
+      - ./config:/app/config
+    environment:
+      - TELNET_DATADIR=/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: train --config /app/config/default.yaml
+
+  # Inference service (CPU)
+  forecast:
+    build:
+      context: .
+      target: inference
+    volumes:
+      - ${TELNET_DATADIR:-./data}:/data
+      - ./results:/results
+      - ./config:/app/config
+    environment:
+      - TELNET_DATADIR=/data
+    command: forecast --help
+
+  # Download service
+  download:
+    build:
+      context: .
+      target: inference
+    volumes:
+      - ${TELNET_DATADIR:-./data}:/data
+      - ~/.cdsapirc:/root/.cdsapirc:ro
+    environment:
+      - TELNET_DATADIR=/data
+    command: download --era5 --indices --dates 2020-2024
+
+  # Evaluation service
+  evaluate:
+    build:
+      context: .
+      target: inference
+    volumes:
+      - ${TELNET_DATADIR:-./data}:/data
+      - ./results:/results
+    environment:
+      - TELNET_DATADIR=/data
+    command: evaluate --compare seas5 --metric rps
