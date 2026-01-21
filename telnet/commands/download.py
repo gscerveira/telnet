@@ -242,20 +242,18 @@ def preprocess_era5(cfg: dict, era5_dir: Path, start_year: int, end_year: int):
 
 def download_seas5(cfg: dict, data_dir: Path, start_year: int, end_year: int):
     """Download SEAS5 forecast data from CDS."""
-    import cdsapi
+    from telnet.seas5 import download_seas5 as seas5_download
     
     console.print("\n[bold]Downloading SEAS5 forecast data...[/bold]")
-    console.print("  [yellow]SEAS5 download will be fully implemented in Phase 2.[/yellow]")
-    console.print("  This will download seasonal forecast hindcasts for downscaling.")
     
-    # Check for CDS credentials
-    cdsapirc = Path.home() / '.cdsapirc'
-    if not cdsapirc.exists():
-        console.print("  [red]Note: ~/.cdsapirc required for SEAS5 download.[/red]")
-        return
+    region = cfg.get('region', None)
+    init_months = [2, 5, 8, 11]  # Feb, May, Aug, Nov (FMA, MJJ, SON, DJF seasons)
     
-    seas5_dir = data_dir / 'seas5'
-    seas5_dir.mkdir(parents=True, exist_ok=True)
-    
-    console.print(f"  Output directory: {seas5_dir}")
-    console.print("  [dim]SEAS5 integration coming in Phase 2...[/dim]")
+    seas5_download(
+        data_dir=data_dir,
+        start_year=start_year,
+        end_year=end_year,
+        init_months=init_months,
+        lead_months=[1, 2, 3, 4, 5, 6],
+        region=region,
+    )
